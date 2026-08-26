@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "porthop",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-26",
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": ["TOKEN"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "porthop",
+      "database_id": "0eb670b6-c60e-4b41-b2a3-ec8acf9e31bf",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

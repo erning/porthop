@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+method=GET
+url=
+
+while (( $# )); do
+    case $1 in
+        --request) method=$2; shift 2 ;;
+        --header|--data|--connect-timeout|--max-time|--write-out) shift 2 ;;
+        --silent|--show-error) shift ;;
+        *) url=$1; shift ;;
+    esac
+done
+
+path=${url#*://}
+path=/${path#*/}
+
+case "$method:$path" in
+    PUT:/v1/channels/wg)
+        printf '%s\n200' '{"name":"wg","port":31001,"updated_at":1,"failed_port":null,"failed_at":null}'
+        ;;
+    PUT:/v1/channels/wg/failure)
+        printf '%s\n200' '{"name":"wg","port":31001,"updated_at":1,"failed_port":31001,"failed_at":2}'
+        ;;
+    GET:/v1/channels/wg)
+        printf '%s\n200' '{"name":"wg","port":31001,"updated_at":1,"failed_port":30001,"failed_at":2}'
+        ;;
+    GET:/v1/channels)
+        printf '%s\n200' '{"channels":[{"name":"backup","port":32001,"updated_at":3,"failed_port":null,"failed_at":null},{"name":"wg","port":31001,"updated_at":1,"failed_port":30001,"failed_at":2}]}'
+        ;;
+    DELETE:/v1/channels/wg)
+        printf '\n204'
+        ;;
+    *)
+        printf '%s\n404' '{"error":"not found"}'
+        ;;
+esac

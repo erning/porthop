@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly peer='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO='
+readonly endpoint=${WG_ENDPOINT:-203.0.113.10:30001}
+
+case ${1-}:${3-} in
+    show:peers) printf '%s\n' "$peer" ;;
+    show:endpoints) printf '%s\t%s\n' "$peer" "$endpoint" ;;
+    show:latest-handshakes)
+        if [[ ${WG_HANDSHAKE-} == now ]]; then
+            printf '%s\t%s\n' "$peer" "$(date +%s)"
+        else
+            printf '%s\t%s\n' "$peer" "${WG_HANDSHAKE:-0}"
+        fi
+        ;;
+    set:peer) ;;
+    *) exit 1 ;;
+esac
