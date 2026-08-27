@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly DEFAULT_URL=https://porthop.erning.workers.dev PORT_MIN=20000 PORT_MAX=59999
+readonly DEFAULT_URL=https://porthop.erning.workers.dev DEFAULT_ENV_FILE=/etc/porthop.env
+readonly PORT_MIN=20000 PORT_MAX=59999
 readonly NFT_FAMILY=inet NFT_TABLE=porthop NFT_BASE_CHAIN=prerouting
 readonly COMMENT_PREFIX=porthop: LOCK_FILE=/run/porthop-forward.lock
 readonly PROGRAM_NAME="${0##*/}"
@@ -19,17 +20,17 @@ Usage:
   $PROGRAM_NAME coordinator get <name> [<options>]
   $PROGRAM_NAME coordinator del <name> [<options>]
   $PROGRAM_NAME coordinator list [<options>]
-  $PROGRAM_NAME server <name> <interface> [<options>]
-  $PROGRAM_NAME client <name> <interface> [<options>]
+  $PROGRAM_NAME server [<name> <interface>] [<options>]
+  $PROGRAM_NAME client [<name> <interface>] [<options>]
 
 Coordinator options:
-  --url <url>  --token-file <path>  --json  --verbose
+  --env <path>  --url <url>  --token-file <path>  --json  --verbose
 
 Server options:
-  --url <url>  --token-file <path>  --dry-run  --verbose
+  --env <path>  --url <url>  --token-file <path>  --dry-run  --verbose
 
 Client options:
-  --stale-after <seconds>  --url <url>  --token-file <path>
+  --env <path>  --stale-after <seconds>  --url <url>  --token-file <path>
   --dry-run  --verbose
 EOF
 }
@@ -42,6 +43,30 @@ validate_name() { [[ $1 =~ ^[A-Za-z0-9_.-]+$ ]] || die 2 'invalid name.'; }
 validate_iface() { [[ $1 =~ ^[A-Za-z0-9_.-]{1,15}$ ]] || die 2 'invalid WireGuard interface.'; }
 validate_port() { [[ $1 =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )) || die 2 "invalid port: $1"; }
 validate_nonnegative() { [[ $2 =~ ^[0-9]+$ ]] || die 2 "invalid $1: $2"; }
+
+load_env() {
+    local env_file=$DEFAULT_ENV_FILE env_set=0
+    ENV_ARGS=()
+    while (( $# )); do
+        if [[ $1 == --env ]]; then
+            need_value "$@"
+            (( ! env_set )) || die 2 '--env may only be specified once.'
+            env_file=$2
+            env_set=1
+            shift 2
+        else
+            ENV_ARGS+=("$1")
+            shift
+        fi
+    done
+    if [[ -e $env_file ]]; then
+        [[ -f $env_file && -r $env_file ]] || die 1 "cannot read environment file: $env_file"
+        # shellcheck source=/dev/null
+        source "$env_file"
+    elif (( env_set )); then
+        die 1 "cannot read environment file: $env_file"
+    fi
+}
 
 lock_nft() {
     (( EUID == 0 )) || die 1 'this command must be run as root.'
@@ -318,6 +343,8 @@ print_channel() {
 parse_coordinator_options() {
     local allow_port=$1
     shift
+    load_env "$@"
+    set -- "${ENV_ARGS[@]}"
     COORD_URL= COORD_TOKEN_FILE= COORD_PORT= COORD_JSON=0
     VERBOSE=0
     while (( $# )); do
@@ -525,9 +552,13 @@ server_publish_port() {
 }
 
 server_command() {
-    (( $# >= 3 )) || { usage; exit 2; }
-    local name=$2 iface=$3
-    shift 3
+    shift
+    load_env "$@"
+    set -- "${ENV_ARGS[@]}"
+    local name=${PORTHOP_NAME-} iface=${PORTHOP_INTERFACE-}
+    if (( $# )) && [[ $1 != --* ]]; then name=$1; shift; fi
+    if (( $# )) && [[ $1 != --* ]]; then iface=$1; shift; fi
+    [[ -n $name && -n $iface ]] || { usage; exit 2; }
     validate_name "$name"
     validate_iface "$iface"
     parse_server_options "$@"
@@ -617,7 +648,9 @@ server_command() {
 }
 
 parse_client_options() {
-    CLIENT_URL= CLIENT_TOKEN_FILE= CLIENT_STALE_AFTER=300 CLIENT_STALE_SET=0 CLIENT_DRY_RUN=0
+    CLIENT_URL= CLIENT_TOKEN_FILE=
+    CLIENT_STALE_AFTER=${PORTHOP_STALE_AFTER:-300} CLIENT_STALE_SET=0 CLIENT_DRY_RUN=0
+    validate_nonnegative stale-after "$CLIENT_STALE_AFTER"
     VERBOSE=0
     while (( $# )); do
         case $1 in
@@ -649,9 +682,13 @@ parse_client_options() {
 }
 
 client_command() {
-    (( $# >= 3 )) || { usage; exit 2; }
-    local name=$2 iface=$3
-    shift 3
+    shift
+    load_env "$@"
+    set -- "${ENV_ARGS[@]}"
+    local name=${PORTHOP_NAME-} iface=${PORTHOP_INTERFACE-}
+    if (( $# )) && [[ $1 != --* ]]; then name=$1; shift; fi
+    if (( $# )) && [[ $1 != --* ]]; then iface=$1; shift; fi
+    [[ -n $name && -n $iface ]] || { usage; exit 2; }
     validate_name "$name"
     validate_iface "$iface"
     parse_client_options "$@"

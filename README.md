@@ -20,19 +20,19 @@ sudo install -m 0755 porthop /usr/local/bin/porthop
 ```
 
 Coordinator 的部署方法见 [worker/README.md](worker/README.md)。部署后，让 Server 和
-所有 Client 使用同一个 Token：
+所有 Client 使用同一个 Token，并分别创建环境变量文件。例如 Client 配置为：
 
 ```bash
 install -d -m 0700 ~/.config/porthop
 printf %s "your-token" > ~/.config/porthop/token
 chmod 0600 ~/.config/porthop/token
-export PORTHOP_TOKEN_FILE=~/.config/porthop/token
-```
-
-如需使用自己的 Worker 地址，再设置：
-
-```bash
-export PORTHOP_URL=https://porthop.example.com
+cat > ~/.config/porthop/client.env <<EOF
+PORTHOP_NAME=home
+PORTHOP_INTERFACE=wg0
+PORTHOP_URL=https://porthop.example.com
+PORTHOP_TOKEN_FILE=$HOME/.config/porthop/token
+PORTHOP_STALE_AFTER=300
+EOF
 ```
 
 ## 开始使用
@@ -43,9 +43,12 @@ export PORTHOP_URL=https://porthop.example.com
 在 Server 上执行：
 
 ```bash
-sudo --preserve-env=PORTHOP_TOKEN_FILE,PORTHOP_URL \
-  porthop server home wg0 --verbose
+sudo install -d -m 0700 /etc/porthop
+sudo cp ~/.config/porthop/client.env /etc/porthop/server.env
+sudo porthop server --env /etc/porthop/server.env --verbose
 ```
+
+Server 环境变量文件使用相同格式，不需要 `PORTHOP_STALE_AFTER`。
 
 第一次运行会选择一个公网端口，建立 nftables 转发，并把端口写入 Coordinator。以后
 每次运行都会校准本机规则；如果当前端口被报告故障，就切换到新端口。
@@ -53,8 +56,7 @@ sudo --preserve-env=PORTHOP_TOKEN_FILE,PORTHOP_URL \
 在每台 Client 上执行：
 
 ```bash
-sudo --preserve-env=PORTHOP_TOKEN_FILE,PORTHOP_URL \
-  porthop client home wg0 --verbose
+sudo porthop client --env /home/user/.config/porthop/client.env --verbose
 ```
 
 Client 会跟随 Coordinator 中的端口。Endpoint 已经一致时，它才检查最近握手；超过
@@ -87,15 +89,24 @@ sudo porthop forward del home
 
 ## 配置
 
-CLI 支持三个环境变量：
+未指定 `--env` 时，CLI 默认加载 `/etc/porthop.env`；该文件不存在时直接忽略。显式
+指定的文件不存在或无法读取时，命令会失败。环境变量文件使用 Bash 的 `source`
+加载，因此可以使用引号、变量展开和其他 Bash 语法，也应当只加载可信文件。命令行
+参数优先于加载后的环境变量。
 
+CLI 支持以下环境变量：
+
+- `PORTHOP_NAME`：Coordinator Channel 名称。
+- `PORTHOP_INTERFACE`：WireGuard 接口名称。
+- `PORTHOP_STALE_AFTER`：Client 判断握手超时的秒数，默认是 `300`。
 - `PORTHOP_URL`：Coordinator 地址；默认是
   `https://porthop.erning.workers.dev`。
 - `PORTHOP_TOKEN_FILE`：Token 文件路径，推荐使用。
 - `PORTHOP_TOKEN`：直接提供 Token。
 
-命令行的 `--url` 和 `--token-file` 优先于环境变量。完整协议、状态判断和 D1 表结构
-见 [DESIGN.md](DESIGN.md)。
+不使用环境变量文件时，原有调用方式保持不变，例如
+`porthop client home wg0 --stale-after 600`。完整协议、状态判断和 D1 表结构见
+[DESIGN.md](DESIGN.md)。
 
 ## 测试
 

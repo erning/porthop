@@ -51,7 +51,8 @@ porthop forward set wg --dport 51820 --port 30001 --port 30002
 Client 是一次性执行的端口跟随和握手检查命令：
 
 ```text
-porthop client <name> <interface>
+porthop client [<name> <interface>]
+               [--env <path>]
                [--stale-after <seconds>]
                [--url <url>] [--token-file <path>]
                [--dry-run] [--verbose]
@@ -98,7 +99,8 @@ Client 支持 IPv4、主机名和带方括号的 IPv6 Endpoint。接口不存在
 Server 是一次性执行的入口端口协调命令：
 
 ```text
-porthop server <name> <interface>
+porthop server [<name> <interface>]
+               [--env <path>]
                [--url <url>] [--token-file <path>]
                [--dry-run] [--verbose]
 ```
@@ -193,7 +195,7 @@ porthop coordinator list [<options>]
 通用选项为：
 
 ```text
---url <url>  --token-file <path>  --json  --verbose
+--env <path>  --url <url>  --token-file <path>  --json  --verbose
 ```
 
 `set` 创建 Channel 或更新当前端口，`fail` 写入故障端口，`get` 查询一个 Channel，
@@ -203,6 +205,18 @@ porthop coordinator list [<options>]
 wg: port 31001, failed 30001
 backup: port 32001, failed -
 ```
+
+### CLI 环境变量文件
+
+`server`、`client` 和 `coordinator` 支持通过 `--env <path>` 加载环境变量文件。未
+指定该选项时，默认加载 `/etc/porthop.env`；默认文件不存在时忽略，显式指定的文件
+不存在或无法读取时失败。脚本使用 Bash 的 `source` 执行文件，支持引号、变量展开及
+其他 Bash 语法，因此只应加载可信文件。
+
+`PORTHOP_NAME` 和 `PORTHOP_INTERFACE` 分别提供默认的 Channel 名称和 WireGuard
+接口名称，使 `server` 和 `client` 可以省略命令行中的 `<name> <interface>`。
+`PORTHOP_STALE_AFTER` 设置 Client 的握手超时秒数。命令行参数优先于加载后的环境
+变量。
 
 默认 Coordinator 地址为 `https://porthop.erning.workers.dev`。地址读取顺序为
 `--url`、`PORTHOP_URL`、默认地址；令牌读取顺序为 `--token-file`、

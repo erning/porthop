@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -65,8 +68,8 @@ test("coordinator validates local arguments before making requests", async () =>
 });
 
 test("server requires a channel, a WireGuard interface, and valid options", async () => {
-  await rejectsWith(["server"], 2, /porthop server <name> <interface>/);
-  await rejectsWith(["server", "home"], 2, /porthop server <name> <interface>/);
+  await rejectsWith(["server"], 2, /porthop server \[<name> <interface>\]/);
+  await rejectsWith(["server", "home"], 2, /porthop server \[<name> <interface>\]/);
   await rejectsWith(
     ["server", "bad/name", "wg0"],
     2,
@@ -128,7 +131,7 @@ test("client leaves a fresh matching endpoint unchanged", async () => {
 });
 
 test("client validates its local arguments", async () => {
-  await rejectsWith(["client"], 2, /porthop client <name> <interface>/);
+  await rejectsWith(["client"], 2, /porthop client \[<name> <interface>\]/);
   await rejectsWith(
     ["client", "wg", "wg0", "--stale-after", "later"],
     2,
@@ -138,6 +141,61 @@ test("client validates its local arguments", async () => {
     ["client", "wg", "wg0", "--peer", "key"],
     2,
     /unknown client option: --peer/,
+  );
+});
+
+test("client sources routine arguments from an environment file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "porthop-test-"));
+  const envFile = join(directory, "client.env");
+  const token = join(directory, "token");
+  await writeFile(token, "test-token");
+  await writeFile(envFile, [
+    "PORTHOP_NAME=wg",
+    "PORTHOP_INTERFACE=wg0",
+    `PORTHOP_TOKEN_FILE=${token}`,
+    "PORTHOP_STALE_AFTER=$((1 - 1))",
+    "",
+  ].join("\n"));
+  const env = {
+    ...process.env,
+    PATH: `${coordinatorFixtures}:${process.env.PATH}`,
+    WG_ENDPOINT: "203.0.113.10:31001",
+    WG_HANDSHAKE: "1",
+  };
+  const result = await exec(command, ["client", "--env", envFile, "--dry-run"], { env });
+  assert.match(result.stdout, /^wg: would report port 31001 unavailable, handshake age \d+ seconds\n$/);
+});
+
+test("client command-line values override environment file values", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "porthop-test-"));
+  const envFile = join(directory, "client.env");
+  await writeFile(envFile, [
+    "PORTHOP_NAME=wrong",
+    "PORTHOP_INTERFACE=wrong0",
+    "PORTHOP_STALE_AFTER=9999999999",
+    "",
+  ].join("\n"));
+  const env = {
+    ...process.env,
+    PATH: `${coordinatorFixtures}:${process.env.PATH}`,
+    PORTHOP_TOKEN: "test-token",
+    WG_ENDPOINT: "203.0.113.10:31001",
+    WG_HANDSHAKE: "1",
+  };
+  const result = await exec(
+    command,
+    ["client", "wg", "wg0", "--env", envFile, "--stale-after", "0", "--dry-run"],
+    { env },
+  );
+  assert.match(result.stdout, /^wg: would report port 31001 unavailable/);
+});
+
+test("environment file option rejects unreadable and duplicate files", async () => {
+  await rejectsWith(["client", "--env", "/does/not/exist"], 1, /cannot read environment file/);
+  await rejectsWith(
+    ["client", "--env", "/first", "--env", "/second"],
+    2,
+    /--env may only be specified once/,
   );
 });
 
