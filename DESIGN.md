@@ -51,7 +51,7 @@ porthop forward set wg --dport 51820 --port 30001 --port 30002
 Client 是一次性执行的端口跟随和握手检查命令：
 
 ```text
-porthop client [<name> <interface>]
+porthop client <name> <interface>
                [--env <path>]
                [--stale-after <seconds>]
                [--url <url>] [--token-file <path>]
@@ -99,7 +99,7 @@ Client 支持 IPv4、主机名和带方括号的 IPv6 Endpoint。接口不存在
 Server 是一次性执行的入口端口协调命令：
 
 ```text
-porthop server [<name> <interface>]
+porthop server <name> <interface>
                [--env <path>]
                [--url <url>] [--token-file <path>]
                [--dry-run] [--verbose]
@@ -213,8 +213,8 @@ backup: port 32001, failed -
 不存在或无法读取时失败。脚本使用 Bash 的 `source` 执行文件，支持引号、变量展开及
 其他 Bash 语法，因此只应加载可信文件。
 
-`PORTHOP_NAME` 和 `PORTHOP_INTERFACE` 分别提供默认的 Channel 名称和 WireGuard
-接口名称，使 `server` 和 `client` 可以省略命令行中的 `<name> <interface>`。
+Channel 名称和 WireGuard 接口名称始终是 `server` 与 `client` 的必填位置参数，不能
+通过共享的环境变量文件设置。同一台机器因此可以针对多个接口分别执行命令。
 `PORTHOP_STALE_AFTER` 设置 Client 的握手超时秒数。命令行参数优先于加载后的环境
 变量。
 

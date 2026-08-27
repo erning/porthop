@@ -20,8 +20,8 @@ Usage:
   $PROGRAM_NAME coordinator get <name> [<options>]
   $PROGRAM_NAME coordinator del <name> [<options>]
   $PROGRAM_NAME coordinator list [<options>]
-  $PROGRAM_NAME server [<name> <interface>] [<options>]
-  $PROGRAM_NAME client [<name> <interface>] [<options>]
+  $PROGRAM_NAME server <name> <interface> [<options>]
+  $PROGRAM_NAME client <name> <interface> [<options>]
 
 Coordinator options:
   --env <path>  --url <url>  --token-file <path>  --json  --verbose
@@ -555,10 +555,9 @@ server_command() {
     shift
     load_env "$@"
     set -- "${ENV_ARGS[@]}"
-    local name=${PORTHOP_NAME-} iface=${PORTHOP_INTERFACE-}
-    if (( $# )) && [[ $1 != --* ]]; then name=$1; shift; fi
-    if (( $# )) && [[ $1 != --* ]]; then iface=$1; shift; fi
-    [[ -n $name && -n $iface ]] || { usage; exit 2; }
+    (( $# >= 2 )) || { usage; exit 2; }
+    local name=$1 iface=$2
+    shift 2
     validate_name "$name"
     validate_iface "$iface"
     parse_server_options "$@"
@@ -685,10 +684,9 @@ client_command() {
     shift
     load_env "$@"
     set -- "${ENV_ARGS[@]}"
-    local name=${PORTHOP_NAME-} iface=${PORTHOP_INTERFACE-}
-    if (( $# )) && [[ $1 != --* ]]; then name=$1; shift; fi
-    if (( $# )) && [[ $1 != --* ]]; then iface=$1; shift; fi
-    [[ -n $name && -n $iface ]] || { usage; exit 2; }
+    (( $# >= 2 )) || { usage; exit 2; }
+    local name=$1 iface=$2
+    shift 2
     validate_name "$name"
     validate_iface "$iface"
     parse_client_options "$@"

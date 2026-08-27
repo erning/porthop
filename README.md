@@ -27,8 +27,6 @@ install -d -m 0700 ~/.config/porthop
 printf %s "your-token" > ~/.config/porthop/token
 chmod 0600 ~/.config/porthop/token
 cat > ~/.config/porthop/client.env <<EOF
-PORTHOP_NAME=home
-PORTHOP_INTERFACE=wg0
 PORTHOP_URL=https://porthop.example.com
 PORTHOP_TOKEN_FILE=$HOME/.config/porthop/token
 PORTHOP_STALE_AFTER=300
@@ -45,7 +43,7 @@ EOF
 ```bash
 sudo install -d -m 0700 /etc/porthop
 sudo cp ~/.config/porthop/client.env /etc/porthop/server.env
-sudo porthop server --env /etc/porthop/server.env --verbose
+sudo porthop server home wg0 --env /etc/porthop/server.env --verbose
 ```
 
 Server 环境变量文件使用相同格式，不需要 `PORTHOP_STALE_AFTER`。
@@ -56,7 +54,7 @@ Server 环境变量文件使用相同格式，不需要 `PORTHOP_STALE_AFTER`。
 在每台 Client 上执行：
 
 ```bash
-sudo porthop client --env /home/user/.config/porthop/client.env --verbose
+sudo porthop client home wg0 --env /home/user/.config/porthop/client.env --verbose
 ```
 
 Client 会跟随 Coordinator 中的端口。Endpoint 已经一致时，它才检查最近握手；超过
@@ -96,8 +94,6 @@ sudo porthop forward del home
 
 CLI 支持以下环境变量：
 
-- `PORTHOP_NAME`：Coordinator Channel 名称。
-- `PORTHOP_INTERFACE`：WireGuard 接口名称。
 - `PORTHOP_STALE_AFTER`：Client 判断握手超时的秒数，默认是 `300`。
 - `PORTHOP_URL`：Coordinator 地址；默认是
   `https://porthop.erning.workers.dev`。

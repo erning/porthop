@@ -68,8 +68,8 @@ test("coordinator validates local arguments before making requests", async () =>
 });
 
 test("server requires a channel, a WireGuard interface, and valid options", async () => {
-  await rejectsWith(["server"], 2, /porthop server \[<name> <interface>\]/);
-  await rejectsWith(["server", "home"], 2, /porthop server \[<name> <interface>\]/);
+  await rejectsWith(["server"], 2, /porthop server <name> <interface>/);
+  await rejectsWith(["server", "home"], 2, /porthop server <name> <interface>/);
   await rejectsWith(
     ["server", "bad/name", "wg0"],
     2,
@@ -131,7 +131,7 @@ test("client leaves a fresh matching endpoint unchanged", async () => {
 });
 
 test("client validates its local arguments", async () => {
-  await rejectsWith(["client"], 2, /porthop client \[<name> <interface>\]/);
+  await rejectsWith(["client"], 2, /porthop client <name> <interface>/);
   await rejectsWith(
     ["client", "wg", "wg0", "--stale-after", "later"],
     2,
@@ -150,8 +150,6 @@ test("client sources routine arguments from an environment file", async () => {
   const token = join(directory, "token");
   await writeFile(token, "test-token");
   await writeFile(envFile, [
-    "PORTHOP_NAME=wg",
-    "PORTHOP_INTERFACE=wg0",
     `PORTHOP_TOKEN_FILE=${token}`,
     "PORTHOP_STALE_AFTER=$((1 - 1))",
     "",
@@ -162,16 +160,14 @@ test("client sources routine arguments from an environment file", async () => {
     WG_ENDPOINT: "203.0.113.10:31001",
     WG_HANDSHAKE: "1",
   };
-  const result = await exec(command, ["client", "--env", envFile, "--dry-run"], { env });
+  const result = await exec(command, ["client", "wg", "wg0", "--env", envFile, "--dry-run"], { env });
   assert.match(result.stdout, /^wg: would report port 31001 unavailable, handshake age \d+ seconds\n$/);
 });
 
-test("client command-line values override environment file values", async () => {
+test("client command-line options override environment file values", async () => {
   const directory = await mkdtemp(join(tmpdir(), "porthop-test-"));
   const envFile = join(directory, "client.env");
   await writeFile(envFile, [
-    "PORTHOP_NAME=wrong",
-    "PORTHOP_INTERFACE=wrong0",
     "PORTHOP_STALE_AFTER=9999999999",
     "",
   ].join("\n"));
