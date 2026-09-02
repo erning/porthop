@@ -130,6 +130,26 @@ list_rules() {
         '
 }
 
+list_rule_handles() {
+    nft -a list chain "$NFT_FAMILY" "$NFT_TABLE" "$1" 2>/dev/null |
+        awk '
+            /udp dport [0-9]+/ && /redirect to/ && /handle [0-9]+/ {
+                source = target = handle = ""
+                for (i = 1; i <= NF; i++) {
+                    if ($i == "dport") source = $(i + 1)
+                    if ($i == "redirect" && $(i + 1) == "to") {
+                        target = $(i + 2)
+                        if (target == ":") target = $(i + 3)
+                        sub(/^:/, "", target)
+                    }
+                    if ($i == "handle") handle = $(i + 1)
+                }
+                if (source != "" && target != "" && handle != "")
+                    print source, target, handle
+            }
+        '
+}
+
 find_ref() {
     local wanted=$1 name chain handle
     REF_CHAIN= REF_HANDLE=
@@ -183,10 +203,11 @@ clear_conntrack() {
 
 set_command() {
     (( $# >= 2 )) || { usage; exit 2; }
-    local name=$2 dport= port own_chain= chain batch= other_name other_chain handle source target
+    local name=$2 dport= port own_chain= chain batch= other_name other_chain ref_handle
+    local source target rule_handle rule_count
     local old_dport= old_ports_text= ports_text=
-    local -a ports=() old_ports=()
-    local -A seen=()
+    local -a ports=() old_ports=() replaced_ports=() replaced_targets=()
+    local -A seen=() removed_by_chain=() rules_by_chain=() refs_by_chain=()
     shift 2
     validate_name "$name"
 
@@ -226,14 +247,30 @@ set_command() {
         return
     fi
 
-    while read -r other_name other_chain handle; do
+    while read -r other_name other_chain ref_handle; do
         [[ $other_name == "$name" ]] && continue
-        while read -r source target; do
+        rule_count=0
+        while read -r source target rule_handle; do
+            (( rule_count += 1 ))
             for port in "${ports[@]}"; do
-                [[ $source != "$port" ]] || die 1 "UDP port $port is already used by $other_name."
+                [[ $source != "$port" ]] || {
+                    batch+="delete rule $NFT_FAMILY $NFT_TABLE $other_chain handle $rule_handle"$'\n'
+                    (( removed_by_chain[$other_chain] += 1 ))
+                    replaced_ports+=("$source")
+                    replaced_targets+=("$target")
+                }
             done
-        done < <(list_rules "$other_chain")
+        done < <(list_rule_handles "$other_chain")
+        rules_by_chain[$other_chain]=$rule_count
+        refs_by_chain[$other_chain]=$ref_handle
     done < <(list_refs)
+
+    for other_chain in "${!removed_by_chain[@]}"; do
+        if (( removed_by_chain[$other_chain] == rules_by_chain[$other_chain] )); then
+            batch+="delete rule $NFT_FAMILY $NFT_TABLE $NFT_BASE_CHAIN handle ${refs_by_chain[$other_chain]}"$'\n'
+            batch+="delete chain $NFT_FAMILY $NFT_TABLE $other_chain"$'\n'
+        fi
+    done
 
     chain=$(chain_for_name "$name")
     if [[ -n $own_chain ]]; then
@@ -251,6 +288,9 @@ set_command() {
     printf '%s' "$batch" | nft -f -
 
     [[ -z $old_dport ]] || clear_conntrack "$old_dport" "${old_ports[@]}"
+    for (( rule_count=0; rule_count<${#replaced_ports[@]}; rule_count++ )); do
+        clear_conntrack "${replaced_targets[$rule_count]}" "${replaced_ports[$rule_count]}"
+    done
     print_forward "$name" "$dport" "${ports[@]}"
 }
 
@@ -784,17 +824,19 @@ client_command() {
     fi
 }
 
-case ${1-}:${2-} in
-    forward:set) shift; set_command "$@" ;;
-    forward:get) shift; get_command "$@" ;;
-    forward:del) shift; del_command "$@" ;;
-    forward:list) shift; list_command "$@" ;;
-    coordinator:set) shift; coordinator_set_command "$@" ;;
-    coordinator:fail) shift; coordinator_fail_command "$@" ;;
-    coordinator:get) shift; coordinator_get_command "$@" ;;
-    coordinator:del) shift; coordinator_del_command "$@" ;;
-    coordinator:list) shift; coordinator_list_command "$@" ;;
-    server:*) server_command "$@" ;;
-    client:*) client_command "$@" ;;
-    *) usage; exit 2 ;;
-esac
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    case ${1-}:${2-} in
+        forward:set) shift; set_command "$@" ;;
+        forward:get) shift; get_command "$@" ;;
+        forward:del) shift; del_command "$@" ;;
+        forward:list) shift; list_command "$@" ;;
+        coordinator:set) shift; coordinator_set_command "$@" ;;
+        coordinator:fail) shift; coordinator_fail_command "$@" ;;
+        coordinator:get) shift; coordinator_get_command "$@" ;;
+        coordinator:del) shift; coordinator_del_command "$@" ;;
+        coordinator:list) shift; coordinator_list_command "$@" ;;
+        server:*) server_command "$@" ;;
+        client:*) client_command "$@" ;;
+        *) usage; exit 2 ;;
+    esac
+fi

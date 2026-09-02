@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -225,6 +225,41 @@ test("set requires a valid name, target port, and at least one source port", asy
     ["forward", "set", "wg", "--dport", "51820", "--port", "0"],
     2,
     /invalid port: 0/,
+  );
+});
+
+test("set takes a requested port from a stale forwarding group", async () => {
+  const script = `
+    source "$1"
+    BATCH_FILE=$2
+    lock_nft() { :; }
+    ensure_table() { :; }
+    read_forward() { return 1; }
+    list_refs() { printf '%s\\n' 'stale old_chain 41'; }
+    list_rule_handles() { printf '%s\\n' '10260 51821 51'; }
+    chain_for_name() { printf '%s\\n' new_chain; }
+    clear_conntrack() { :; }
+    nft() {
+      if [[ $1 == list ]]; then return 1; fi
+      if [[ $1 == -f && $2 == - ]]; then command tee "$BATCH_FILE" >/dev/null; fi
+    }
+    set_command set current --dport 51820 --port 10260
+  `;
+  const directory = await mkdtemp(join(tmpdir(), "porthop-test-"));
+  const batch = join(directory, "batch");
+  const result = await exec("bash", ["-c", script, "test", command, batch]);
+  assert.equal(result.stdout, "current: 51820 <- 10260\n");
+  assert.equal(
+    await readFile(batch, "utf8"),
+    [
+      "delete rule inet porthop old_chain handle 51",
+      "delete rule inet porthop prerouting handle 41",
+      "delete chain inet porthop old_chain",
+      "add chain inet porthop new_chain",
+      'add rule inet porthop prerouting jump new_chain comment "porthop:current"',
+      "add rule inet porthop new_chain udp dport 10260 redirect to :51820",
+      "",
+    ].join("\n"),
   );
 });
 
