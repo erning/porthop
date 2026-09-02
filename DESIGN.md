@@ -17,6 +17,10 @@ Client 与 Server 不依赖 WireGuard 隧道直接协商。双方通过 Coordina
 
 ## 组件与职责
 
+CLI 使用脚本中的静态 `PROGRAM_VERSION` 标识软件版本。`porthop version` 和
+`porthop --version` 均输出程序名及版本号；当前版本为 `0.1.0`。该软件版本独立于
+Coordinator API 路径中的协议版本。
+
 ### `forward`
 
 `forward` 是不保存业务状态的本机执行器，只负责让指定的一组 UDP 入口端口转发到

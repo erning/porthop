@@ -19,6 +19,15 @@ Client 需要 Bash、WireGuard 工具、`curl`，以及 `jq` 或 OpenWrt 的 `js
 sudo install -m 0755 porthop /usr/local/bin/porthop
 ```
 
+安装后可以查看 CLI 版本：
+
+```bash
+porthop --version
+```
+
+当前输出为 `porthop 0.1.0`。脚本中的 `PROGRAM_VERSION` 是 OpenWrt 软件包可读取的
+静态版本号。
+
 Coordinator 的部署方法见 [worker/README.md](worker/README.md)。部署后，让 Server 和
 所有 Client 使用同一个 Token，并分别创建环境变量文件。例如 Client 配置为：
 
@@ -57,9 +66,11 @@ Server 环境变量文件使用相同格式，不需要 `PORTHOP_STALE_AFTER`。
 sudo porthop client home wg0 --env /home/user/.config/porthop/client.env --verbose
 ```
 
-Client 会跟随 Coordinator 中的端口。Endpoint 已经一致时，它才检查最近握手；超过
-300 秒没有握手便报告当前端口。可以用 `--stale-after 600` 调整阈值。WireGuard Peer
-最好配置 `PersistentKeepalive`，否则一条正常但长期空闲的隧道也会被当成故障。
+Client 会先检查最近握手；握手正常时不访问 Coordinator。超过 300 秒没有握手时，
+Client 查询并跟随 Coordinator 中的端口；端口尚未变化时报告当前端口不可达。可以用
+`--stale-after 600` 调整阈值，或用 `--refresh` 在握手正常时强制校准 Endpoint。
+WireGuard Peer 最好配置 `PersistentKeepalive`，否则一条正常但长期空闲的隧道也可能
+被当成故障。
 
 `server` 和 `client` 都只运行一次，适合放进 systemd timer 或 cron。先用
 `--dry-run --verbose` 检查实际决策，不会改规则、Endpoint 或 Coordinator 状态。

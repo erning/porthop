@@ -18,9 +18,17 @@ async function rejectsWith(args, code, pattern) {
 }
 
 test("only implemented top-level commands are accepted", async () => {
-  await rejectsWith([], 2, /Usage:\n  porthop forward set/);
-  await rejectsWith(["generate"], 2, /Usage:\n  porthop forward set/);
-  await rejectsWith(["client", "watch"], 2, /Usage:\n  porthop forward set/);
+  await rejectsWith([], 2, /Usage:\n  porthop version \| --version/);
+  await rejectsWith(["generate"], 2, /Usage:\n  porthop version \| --version/);
+  await rejectsWith(["client", "watch"], 2, /Usage:\n  porthop version \| --version/);
+});
+
+test("version commands print the program name and version", async () => {
+  for (const argument of ["version", "--version"]) {
+    const result = await exec(command, [argument]);
+    assert.equal(result.stdout, "porthop 0.1.0\n");
+    assert.equal(result.stderr, "");
+  }
 });
 
 test("coordinator exposes set, fail, get, del, and list", async () => {

@@ -6,11 +6,13 @@ readonly PORT_MIN=20000 PORT_MAX=59999
 readonly NFT_FAMILY=inet NFT_TABLE=porthop NFT_BASE_CHAIN=prerouting
 readonly COMMENT_PREFIX=porthop: LOCK_FILE=/run/porthop-forward.lock
 readonly PROGRAM_NAME="${0##*/}"
+PROGRAM_VERSION=0.1.0
 VERBOSE=0
 
 usage() {
     cat >&2 <<EOF
 Usage:
+  $PROGRAM_NAME version | --version
   $PROGRAM_NAME forward set <name> --dport <port> --port <port> [--port <port> ...]
   $PROGRAM_NAME forward get <name>
   $PROGRAM_NAME forward del <name>
@@ -833,6 +835,7 @@ client_command() {
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     case ${1-}:${2-} in
+        version:*|--version:*) printf '%s %s\n' "$PROGRAM_NAME" "$PROGRAM_VERSION" ;;
         forward:set) shift; set_command "$@" ;;
         forward:get) shift; get_command "$@" ;;
         forward:del) shift; del_command "$@" ;;
