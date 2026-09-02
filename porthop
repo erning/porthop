@@ -677,8 +677,8 @@ server_command() {
     else
         verbose 'reconciling local forwarding with Coordinator state'
         server_forward_set "$name" "$dport" "$current_port"
+        server_publish_port "$name" "$current_port"
     fi
-    server_publish_port "$name" "$current_port"
     if (( SERVER_DRY_RUN && ! matches )); then
         printf '%s: would reconcile port %s -> %s:%s\n' "$name" "$current_port" "$iface" "$dport"
     else

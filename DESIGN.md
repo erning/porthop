@@ -124,8 +124,8 @@ Server 先读取 Coordinator 的完整状态，再读取本机转发状态，并
    错误都必须失败退出。
 2. `port != failed_port`：当前端口没有被报告故障。Server 以 Coordinator 的 `port`
    为准检查本机转发；转发组不存在、目标端口不符、当前端口未开放或残留其他入口端口
-   时，执行 `forward set` 将规则校准为唯一的当前端口。随后把当前端口写回
-   Coordinator 并退出。
+   时，执行 `forward set` 将规则校准为唯一的当前端口，随后把当前端口写回 Coordinator；
+   本机转发已经一致时不重复写入 Coordinator。完成后退出。
 3. `port == failed_port`：当前端口被报告故障。Server 生成一个不同的新公网端口，先
    通过 `forward set` 同时开放旧端口和新端口，再把新端口发布到 Coordinator，然后
    退出。
@@ -170,7 +170,8 @@ CREATE TABLE channels (
 );
 ```
 
-`port` 是 Server 写入的当前端口，`updated_at` 是该端口的最近写入时间；
+`port` 是 Server 写入的当前端口，`updated_at` 是该端口的最近写入时间，不作为 Server
+心跳或在线状态；
 `failed_port` 是 Client 最近报告不可达的端口，`failed_at` 是该报告的时间。时间均为
 Unix 时间戳，单位为秒。Server 始终以 `port` 记录自己实际使用并向 Client 发布的
 端口。
