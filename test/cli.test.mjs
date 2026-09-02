@@ -87,7 +87,7 @@ test("server requires a channel, a WireGuard interface, and valid options", asyn
   );
 });
 
-test("client follows the Coordinator port before checking handshakes", async () => {
+test("client follows the Coordinator port after a stale handshake", async () => {
   const env = {
     ...process.env,
     PATH: `${coordinatorFixtures}:${process.env.PATH}`,
@@ -118,16 +118,27 @@ test("client reports stale matching endpoints and accepts dry-run", async () => 
   );
 });
 
-test("client leaves a fresh matching endpoint unchanged", async () => {
+test("client leaves a fresh endpoint unchanged without Coordinator access", async () => {
   const env = {
     ...process.env,
     PATH: `${coordinatorFixtures}:${process.env.PATH}`,
-    PORTHOP_TOKEN: "test-token",
     WG_ENDPOINT: "203.0.113.10:31001",
     WG_HANDSHAKE: "now",
   };
   const result = await exec(command, ["client", "wg", "wg0"], { env });
   assert.match(result.stdout, /^wg: port 31001, handshake age \d+ seconds\n$/);
+});
+
+test("client refreshes a fresh endpoint when requested", async () => {
+  const env = {
+    ...process.env,
+    PATH: `${coordinatorFixtures}:${process.env.PATH}`,
+    PORTHOP_TOKEN: "test-token",
+    WG_ENDPOINT: "203.0.113.10:30001",
+    WG_HANDSHAKE: "now",
+  };
+  const result = await exec(command, ["client", "wg", "wg0", "--refresh"], { env });
+  assert.equal(result.stdout, "wg: endpoint 30001 -> 31001, wg0\n");
 });
 
 test("client validates its local arguments", async () => {

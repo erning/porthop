@@ -31,7 +31,7 @@ Server options:
 
 Client options:
   --env <path>  --stale-after <seconds>  --url <url>  --token-file <path>
-  --dry-run  --verbose
+  --refresh  --dry-run  --verbose
 EOF
 }
 
@@ -688,7 +688,8 @@ server_command() {
 
 parse_client_options() {
     CLIENT_URL= CLIENT_TOKEN_FILE=
-    CLIENT_STALE_AFTER=${PORTHOP_STALE_AFTER:-300} CLIENT_STALE_SET=0 CLIENT_DRY_RUN=0
+    CLIENT_STALE_AFTER=${PORTHOP_STALE_AFTER:-300} CLIENT_STALE_SET=0
+    CLIENT_REFRESH=0 CLIENT_DRY_RUN=0
     validate_nonnegative stale-after "$CLIENT_STALE_AFTER"
     VERBOSE=0
     while (( $# )); do
@@ -713,6 +714,7 @@ parse_client_options() {
                 CLIENT_TOKEN_FILE=$2
                 shift 2
                 ;;
+            --refresh) CLIENT_REFRESH=1; shift ;;
             --dry-run) CLIENT_DRY_RUN=1; shift ;;
             --verbose) VERBOSE=1; shift ;;
             *) die 2 "unknown client option: $1" ;;
@@ -731,19 +733,6 @@ client_command() {
     validate_iface "$iface"
     parse_client_options "$@"
     require_command wg
-    require_command curl
-    require_json_tool
-
-    COORD_URL=${CLIENT_URL:-${PORTHOP_URL:-$DEFAULT_URL}}
-    COORD_TOKEN=$(resolve_token "$CLIENT_TOKEN_FILE")
-
-    verbose "reading Coordinator channel: $name"
-    coordinator_request GET "/v1/channels/$name"
-    local wanted_port
-    wanted_port=$(json_field "$HTTP_BODY" port) ||
-        die 1 'Coordinator returned invalid channel state.'
-    validate_port "$wanted_port"
-    verbose "Coordinator current port: $wanted_port"
 
     verbose "reading WireGuard peers from $iface"
     local peers_output
@@ -771,19 +760,6 @@ client_command() {
     validate_port "$actual_port"
     verbose "WireGuard endpoint: $endpoint_host:$actual_port"
 
-    if [[ $actual_port != "$wanted_port" ]]; then
-        verbose "updating WireGuard endpoint port: $actual_port -> $wanted_port"
-        if (( CLIENT_DRY_RUN )); then
-            verbose 'dry run: skipped WireGuard endpoint update'
-            printf '%s: would update endpoint %s -> %s, %s\n' "$name" "$actual_port" "$wanted_port" "$iface"
-        else
-            wg set "$iface" peer "$peer" endpoint "$endpoint_host:$wanted_port" ||
-                die 1 'failed to update WireGuard endpoint.'
-            printf '%s: endpoint %s -> %s, %s\n' "$name" "$actual_port" "$wanted_port" "$iface"
-        fi
-        return
-    fi
-
     verbose "reading latest WireGuard handshake from $iface"
     local handshake_output handshake_peer handshake extra_handshake now age stale=0
     handshake_output=$(wg show "$iface" latest-handshakes 2>/dev/null) ||
@@ -799,6 +775,37 @@ client_command() {
         (( handshake <= now )) && age=$(( now - handshake )) || age=0
         verbose "latest handshake age: $age seconds"
         (( age > CLIENT_STALE_AFTER )) && stale=1
+    fi
+
+    if (( ! stale && ! CLIENT_REFRESH )); then
+        printf '%s: port %s, handshake age %s seconds\n' "$name" "$actual_port" "$age"
+        return
+    fi
+
+    require_command curl
+    require_json_tool
+    COORD_URL=${CLIENT_URL:-${PORTHOP_URL:-$DEFAULT_URL}}
+    COORD_TOKEN=$(resolve_token "$CLIENT_TOKEN_FILE")
+
+    verbose "reading Coordinator channel: $name"
+    coordinator_request GET "/v1/channels/$name"
+    local wanted_port
+    wanted_port=$(json_field "$HTTP_BODY" port) ||
+        die 1 'Coordinator returned invalid channel state.'
+    validate_port "$wanted_port"
+    verbose "Coordinator current port: $wanted_port"
+
+    if [[ $actual_port != "$wanted_port" ]]; then
+        verbose "updating WireGuard endpoint port: $actual_port -> $wanted_port"
+        if (( CLIENT_DRY_RUN )); then
+            verbose 'dry run: skipped WireGuard endpoint update'
+            printf '%s: would update endpoint %s -> %s, %s\n' "$name" "$actual_port" "$wanted_port" "$iface"
+        else
+            wg set "$iface" peer "$peer" endpoint "$endpoint_host:$wanted_port" ||
+                die 1 'failed to update WireGuard endpoint.'
+            printf '%s: endpoint %s -> %s, %s\n' "$name" "$actual_port" "$wanted_port" "$iface"
+        fi
+        return
     fi
 
     if (( ! stale )); then

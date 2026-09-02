@@ -56,7 +56,7 @@ porthop client <name> <interface>
                [--env <path>]
                [--stale-after <seconds>]
                [--url <url>] [--token-file <path>]
-               [--dry-run] [--verbose]
+               [--refresh] [--dry-run] [--verbose]
 ```
 
 `name` 是 Coordinator Channel 的名称，`interface` 是本机 WireGuard 接口名称，二者
@@ -67,13 +67,15 @@ porthop client <name> <interface>
 sudo porthop client home wg0 --stale-after 300 --verbose
 ```
 
-Client 先从 Coordinator 获取当前公网端口，再通过 `wg show` 读取唯一 Peer 的实际
-Endpoint：
+Client 先通过 `wg show` 读取唯一 Peer 的实际 Endpoint 和最近握手时间：
 
-1. 如果实际 Endpoint 端口与 Coordinator 端口不同，Client 保留 Endpoint 主机，只
-   通过 `wg set` 替换端口，然后退出。该分支不检查握手，也不报告故障。
-2. 如果两个端口相同，Client 读取 Peer 的最近握手时间。握手时间未超过阈值时保持
-   现状；超过阈值时，向 Coordinator 报告实际 Endpoint 端口不可达。
+1. 握手时间未超过阈值且未指定 `--refresh` 时，Client 保持现状并退出，不访问
+   Coordinator。
+2. 握手超时或指定 `--refresh` 时，Client 从 Coordinator 获取当前公网端口。如果实际
+   Endpoint 端口与 Coordinator 端口不同，Client 保留 Endpoint 主机，只通过 `wg set`
+   替换端口，然后退出，不报告故障。
+3. 两个端口相同且握手正常时，Client 保持现状；两个端口相同且握手超时时，向
+   Coordinator 报告实际 Endpoint 端口不可达。
 
 `--stale-after` 默认值为 `300` 秒。最近握手时间为 `0` 表示从未成功握手，直接视为
 超时；握手时间晚于当前系统时间时，握手时长按 `0` 秒计算。故障报告始终使用 Peer
@@ -88,9 +90,10 @@ Endpoint：
 Client 支持 IPv4、主机名和带方括号的 IPv6 Endpoint。接口不存在、Peer 数量不是
 1、Peer 没有有效 Endpoint、Channel 不存在以及网络或认证错误都会导致命令失败退出。
 
-`--dry-run` 会完成 Coordinator、Peer Endpoint 和必要的握手查询及判断，但不会执行
-`wg set` 或写入故障状态。`--verbose` 将 Coordinator 端口、Peer、实际 Endpoint、
-握手时长、决策分支以及跳过或执行的操作写入标准错误。普通结果写入标准输出。
+`--refresh` 强制查询 Coordinator，即使握手正常也会校准 Endpoint。`--dry-run` 会完成
+Peer Endpoint、握手和必要的 Coordinator 查询及判断，但不会执行 `wg set` 或写入故障
+状态。`--verbose` 将 Coordinator 端口、Peer、实际 Endpoint、握手时长、决策分支以及
+跳过或执行的操作写入标准错误。普通结果写入标准输出。
 
 若隧道可能长期没有业务流量，应为 Peer 配置 `PersistentKeepalive`，否则正常的空闲
 隧道也可能被误判为握手超时。
